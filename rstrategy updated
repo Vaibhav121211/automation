@@ -252,17 +252,46 @@ def get_required_column_indexes(table):
 
 
 # ============================================================
-# FAST LOADER WAIT
+# ROBUST UI SYNCHRONIZATION
 # ============================================================
 
-def wait_for_loader_fast():
-    """Wait only when the loader is actually visible."""
+def select_strategy_and_wait(row, strategy):
+    """Select strategy and verify the browser accepted it."""
+    drop = row.locator("select").first
+    drop.wait_for(state="visible", timeout=15000)
+
+    # Wait until the requested option exists.
+    drop.locator(f'option[value="{strategy}"]').wait_for(
+        state="attached",
+        timeout=15000
+    )
+
+    drop.select_option(value=strategy)
+
+    # Directly verify the native <select> value.
+    if drop.input_value() != strategy:
+        raise Exception(
+            f"Strategy dropdown was not selected. "
+            f"Expected '{strategy}', got '{drop.input_value()}'."
+        )
+
+    return drop
+
+
+def save_and_wait():
+    """Save and wait only for the actual UI completion."""
+    save_button = page.locator('button[title="Save"]').first
+    save_button.wait_for(state="visible", timeout=15000)
+    save_button.click()
+
     loader = page.locator(LOADER_CSS)
+
+    # The loader can appear after the click, so give it a short opportunity
+    # to appear. This is much safer than immediately moving to another row.
     try:
-        if loader.count() and loader.first.is_visible():
-            loader.first.wait_for(state="hidden", timeout=120000)
+        loader.first.wait_for(state="visible", timeout=1500)
+        loader.first.wait_for(state="hidden", timeout=120000)
     except Exception:
-        # UI may remove the loader between the check and wait.
         pass
 
 # ============================================================
@@ -332,6 +361,8 @@ def process_first_app(app):
         row=table.locator('tr')
 
         length=row.count()
+
+        print(f"{length}")
 
 
         vm_hostname_column, platform_strategy_column = (
@@ -441,17 +472,25 @@ def process_first_app(app):
 
                 #page.wait_for_timeout(3000)
 
-                drop=data.locator('select')
-
-                drop.click()
-
-                drop.select_option(
-                    value=dropdown_strategy
+                select_strategy_and_wait(
+                    data,
+                    dropdown_strategy
                 )
 
 
                 comment = page.locator(
                     'textarea[placeholder="Please state reason."]'
+                )
+
+
+                print(
+                    "Textarea count:",
+                    comment.count()
+                )
+
+                print(
+                    "Textarea visible:",
+                    comment.is_visible()
                 )
 
 
@@ -464,29 +503,10 @@ def process_first_app(app):
 
                 #page.wait_for_timeout(3000)
 
-
                 print("Clicking Save")
 
 
-                page.locator(
-                    'button[title="Save"]'
-                ).click()
-
-
-                loader = page.locator(LOADER_CSS)
-                try:
-                    # Do not wait up to 3 seconds just to discover whether
-                    # the loader is present. If it is already visible, wait
-                    # for it to finish; otherwise continue immediately.
-                    if loader.count() > 0 and loader.first.is_visible():
-                        loader.first.wait_for(
-                            state="hidden",
-                            timeout=120000
-                        )
-                except Exception:
-                    # If the loader disappears between the check and wait,
-                    # continue with the existing table/page synchronization.
-                    pass
+                save_and_wait()
 
 
                 total_strategy_updates += 1
@@ -566,15 +586,15 @@ try:
             ).click()
 
 
-            loader = page.locator(LOADER_CSS)
-            try:
-                if loader.count() > 0 and loader.first.is_visible():
-                    loader.first.wait_for(
-                        state="hidden",
-                        timeout=120000
-                    )
-            except Exception:
-                pass
+            page.locator(LOADER_CSS).wait_for(
+                state="visible",
+                timeout=3000
+            ) if page.locator(LOADER_CSS).is_visible(
+                timeout=3000
+            ) else None; page.locator(LOADER_CSS).wait_for(
+                state="hidden",
+                timeout=120000
+            )
 
 
             next_btn=page.locator(
@@ -593,6 +613,9 @@ try:
 
 
                 length=row.count()
+
+
+                print(f"{length}")
 
 
                 vm_hostname_column, platform_strategy_column = (
@@ -744,28 +767,10 @@ try:
 
                         #page.wait_for_timeout(3000)
 
-
                         print("Clicking Save")
 
 
-                        page.locator(
-                            'button[title="Save"]'
-                        ).click()
-
-
-                        page.locator(LOADER_CSS).wait_for(
-                            state="visible",
-                            timeout=3000
-                        ) if page.locator(
-                            LOADER_CSS
-                        ).is_visible(
-                            timeout=3000
-                        ) else None; page.locator(
-                            LOADER_CSS
-                        ).wait_for(
-                            state="hidden",
-                            timeout=120000
-                        )
+                        save_and_wait()
 
 
                         total_strategy_updates += 1
